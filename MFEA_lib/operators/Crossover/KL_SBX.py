@@ -34,17 +34,12 @@ class KL_SBXCrossover(AbstractCrossover):
             mean[idx_subPop] = np.mean(population[idx_subPop].ls_inds, axis = 0)
             std[idx_subPop] = np.std(population[idx_subPop].ls_inds, axis = 0)
 
-        # for i in range(self.nb_tasks):
-        #     for j in range(self.nb_tasks):
-        #         # std j = e-10; std i = e-4 => kl[i][j] = e12 => prob[i][j] => 0
-        #         kl = np.log((std[j] + 1e-50)/(std[i] + 1e-50)) + (std[i] ** 2 + (mean[i] - mean[j]) ** 2)/(2 * std[j] ** 2 + 1e-50) - 1/2
-        #         # self.prob[i][j] = 1/(1 + kl/self.k)
-        #         self.prob[j][i] = 1/(1 + kl/self.k)
-
         for i in range(self.nb_tasks):
             for j in range(self.nb_tasks):
                 kl = np.log((std[i] + 1e-50)/(std[j] + 1e-50)) + (std[j] ** 2 + (mean[j] - mean[i]) ** 2)/(2 * std[i] ** 2 + 1e-50) - 1/2
                 self.prob[i][j] = 1/(1 + kl/self.k)
+
+        self.prob = np.clip(self.prob, 1/self.dim_uss, 1).tolist()
 
     def __call__(self, pa: Individual, pb: Individual, skf_oa=None, skf_ob=None, *args, **kwargs) -> Tuple[Individual, Individual]:
         if skf_oa == pa.skill_factor:
