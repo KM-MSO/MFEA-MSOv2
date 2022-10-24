@@ -22,9 +22,11 @@ class ElitismSelection(AbstractSelection):
         super().__init__(*args, **kwds)
         assert 0<= random_percent and random_percent <= 1
         self.random_percent = random_percent
+        self.count_time = 0
         
         
     def __call__(self, population:Population, nb_inds_tasks: list, *args, **kwds) -> List[int]:
+        s_time = time.time()
         ls_idx_selected = []
         for idx_subpop, subpop in enumerate(population):
             N_i = min(nb_inds_tasks[idx_subpop], len(subpop))
@@ -43,6 +45,8 @@ class ElitismSelection(AbstractSelection):
             subpop.update_rank()
 
             ls_idx_selected.append(idx_selected_inds)
+        self.count_time += (time.time() - s_time)
+
         return ls_idx_selected
 
 class TournamentSelection(AbstractSelection):

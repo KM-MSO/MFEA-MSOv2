@@ -15,19 +15,22 @@ class KL_SBXCrossover(AbstractCrossover):
         self.nc = nc
         self.k = k
         self.count_time = 0
+        self.count_time_update = [0, 0]
     
     def getInforTasks(self, IndClass: Type[Individual], tasks: List[AbstractTask], seed=None):
         super().getInforTasks(IndClass, tasks, seed)
         # self.prob = 1 - KL_divergence
-        self.prob = [[np.ones((self.dim_uss, )) for i in range(self.nb_tasks)] for j in range(self.nb_tasks)]
-        self.prob = np.array(self.prob)
+        self.prob = np.ones((self.nb_tasks, self.nb_tasks, self.dim_uss))
 
     def update(self, population: Population, **kwargs) -> None:
-        mean: list = np.empty((self.nb_tasks, )).tolist()
-        std: list = np.empty((self.nb_tasks, )).tolist()
+        s_time = time.time()
+        mean: list = np.zeros((self.nb_tasks, )).tolist()
+        std: list = np.zeros((self.nb_tasks, )).tolist()
         for idx_subPop in range(self.nb_tasks):
-            mean[idx_subPop] = np.mean(population[idx_subPop].ls_inds, axis = 0)
-            std[idx_subPop] = np.std(population[idx_subPop].ls_inds, axis = 0)
+            mean[idx_subPop] = population[idx_subPop].__meanInds__
+            std[idx_subPop] = population[idx_subPop].__stdInds__
+        self.count_time_update[0] += time.time() - s_time
+        s_time = time.time()
 
         for i in range(self.nb_tasks):
             for j in range(self.nb_tasks):
@@ -35,6 +38,7 @@ class KL_SBXCrossover(AbstractCrossover):
                 self.prob[i][j] = 1/(1 + kl/self.k)
 
         self.prob = np.clip(self.prob, 1/self.dim_uss, 1)
+        self.count_time_update[1] += time.time() - s_time
 
     @staticmethod
     @jit(nopython = True)
