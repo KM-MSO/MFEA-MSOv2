@@ -22,27 +22,32 @@ class KL_SBXCrossover(AbstractCrossover):
         # self.prob = 1 - KL_divergence
         self.prob = np.ones((self.nb_tasks, self.nb_tasks, self.dim_uss))
 
+    @staticmethod
+    @jit(nopython= True)
+    def _updateProb(prob, k, dim_uss, nb_tasks, mean, std):
+        for i in range(nb_tasks):
+            for j in range(nb_tasks):
+                kl = np.log((std[i] + 1e-50)/(std[j] + 1e-50)) + (std[j] ** 2 + (mean[j] - mean[i]) ** 2)/(2 * std[i] ** 2 + 1e-50) - 1/2
+                prob[i][j] = 1/(1 + kl/k)
+
+        return np.clip(prob, 1/dim_uss, 1)
+
     def update(self, population: Population, **kwargs) -> None:
         s_time = time.time()
-        mean: list = np.zeros((self.nb_tasks, )).tolist()
-        std: list = np.zeros((self.nb_tasks, )).tolist()
+        mean = np.zeros((self.nb_tasks, self.dim_uss))
+        std = np.zeros((self.nb_tasks, self.dim_uss))
         for idx_subPop in range(self.nb_tasks):
             mean[idx_subPop] = population[idx_subPop].__meanInds__
             std[idx_subPop] = population[idx_subPop].__stdInds__
         self.count_time_update[0] += time.time() - s_time
         s_time = time.time()
 
-        for i in range(self.nb_tasks):
-            for j in range(self.nb_tasks):
-                kl = np.log((std[i] + 1e-50)/(std[j] + 1e-50)) + (std[j] ** 2 + (mean[j] - mean[i]) ** 2)/(2 * std[i] ** 2 + 1e-50) - 1/2
-                self.prob[i][j] = 1/(1 + kl/self.k)
-
-        self.prob = np.clip(self.prob, 1/self.dim_uss, 1)
+        self.prob = self.__class__._updateProb(self.prob, self.k, self.dim_uss, self.nb_tasks, mean, std)
         self.count_time_update[1] += time.time() - s_time
 
     @staticmethod
     @jit(nopython = True)
-    def _func(gene_pa, gene_pb, skf_oa, skf_ob, dim_uss, nc, pcd, gene_p_of_oa, gene_p_of_ob):
+    def _crossover(gene_pa, gene_pb, skf_oa, skf_ob, dim_uss, nc, pcd, gene_p_of_oa, gene_p_of_ob):
         u = np.random.rand(dim_uss)
         beta = np.where(u < 0.5, (2*u)**(1/(nc +1)), (2 * (1 - u))**(-1 / (nc + 1)))
 
@@ -68,7 +73,6 @@ class KL_SBXCrossover(AbstractCrossover):
     
         return gene_oa, gene_ob
         
-
     def __call__(self, pa: Individual, pb: Individual, skf_oa=None, skf_ob=None, *args, **kwargs) -> Tuple[Individual, Individual]:
         s_time = time.time()
         if skf_oa == pa.skill_factor:
@@ -84,7 +88,7 @@ class KL_SBXCrossover(AbstractCrossover):
         else:
             raise ValueError()
 
-        gene_oa, gene_ob = self.__class__._func(pa.genes, pb.genes, skf_oa, skf_ob, self.dim_uss, self.nc, self.prob[pa.skill_factor][pb.skill_factor], p_of_oa.genes, p_of_ob.genes)
+        gene_oa, gene_ob = self.__class__._crossover(pa.genes, pb.genes, skf_oa, skf_ob, self.dim_uss, self.nc, self.prob[pa.skill_factor][pb.skill_factor], p_of_oa.genes, p_of_ob.genes)
 
         oa = self.IndClass(gene_oa)
         ob = self.IndClass(gene_ob)

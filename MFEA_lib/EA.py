@@ -1,6 +1,7 @@
 import random
 import numpy as np
 from typing import Type, List
+from numba import jit
 from .numba_utils import numba_RandomIndex
 
 from .tasks.task import AbstractTask
@@ -165,15 +166,31 @@ class SubPopulation:
     def __getWorstIndividual__(self):
         return self.ls_inds[int(np.argmax(self.factorial_rank))]
     
+    @staticmethod
+    @jit(nopython = True)
+    def _numba_meanInds(ls_genes):
+        res = [np.mean(ls_genes[:, i]) for i in range(ls_genes.shape[1])]
+        return np.array(res)
+
     @property 
     def __meanInds__(self):
-        return np.mean([ind.genes for ind in self.ls_inds], axis = 0)
+        # return self.__class__._numba_meanInds(np.array([ind.genes for ind in self.ls_inds]))
+        return np.mean([ind.genes for ind in self.ls_inds], axis= 0)
+
+    @staticmethod
+    @jit(nopython = True)
+    def _numba_stdInds(ls_genes):
+        res = [np.std(ls_genes[:, i]) for i in range(ls_genes.shape[1])]
+        return np.array(res)
+
 
     @property 
     def __stdInds__(self):
-        return np.std([ind.genes for ind in self.ls_inds], axis = 0)
+        # return self.__class__._numba_stdInds(np.array([ind.genes for ind in self.ls_inds]))
+        return np.std([ind.genes for ind in self.ls_inds], axis= 0)
 
     @staticmethod
+    @jit(nopython = True)
     def _sort_rank(ls_fcost):
         return np.argsort(np.argsort(ls_fcost)) + 1
 
@@ -181,7 +198,11 @@ class SubPopulation:
         '''
         Update `factorial_rank` and `scalar_fitness`
         '''
-        self.factorial_rank = np.argsort(np.argsort([ind.fcost for ind in self.ls_inds])) + 1
+        # self.factorial_rank = np.argsort(np.argsort([ind.fcost for ind in self.ls_inds])) + 1
+        if len(self.ls_inds):
+            self.factorial_rank = self.__class__._sort_rank(np.array([ind.fcost for ind in self.ls_inds]))
+        else:
+            self.factorial_rank = np.array([])
         self.scalar_fitness = 1/self.factorial_rank
 
     def select(self, index_selected_inds: list):
