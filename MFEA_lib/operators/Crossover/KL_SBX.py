@@ -3,8 +3,9 @@ from typing import Tuple, Type, List
 
 from ...tasks.task import AbstractTask
 from ...EA import Individual, Population
+from numba import jit
 from . import AbstractCrossover
-
+import time
 class KL_SBXCrossover(AbstractCrossover):
     '''
     pa, pb in [0, 1]^n
@@ -13,11 +14,13 @@ class KL_SBXCrossover(AbstractCrossover):
         super().__init__(*args, **kwargs)
         self.nc = nc
         self.k = k
+        self.count_time = 0
     
     def getInforTasks(self, IndClass: Type[Individual], tasks: List[AbstractTask], seed=None):
         super().getInforTasks(IndClass, tasks, seed)
         # self.prob = 1 - KL_divergence
         self.prob = [[np.ones((self.dim_uss, )) for i in range(self.nb_tasks)] for j in range(self.nb_tasks)]
+        self.prob = np.array(self.prob)
 
     def update(self, population: Population, **kwargs) -> None:
         mean: list = np.empty((self.nb_tasks, )).tolist()
@@ -31,9 +34,39 @@ class KL_SBXCrossover(AbstractCrossover):
                 kl = np.log((std[i] + 1e-50)/(std[j] + 1e-50)) + (std[j] ** 2 + (mean[j] - mean[i]) ** 2)/(2 * std[i] ** 2 + 1e-50) - 1/2
                 self.prob[i][j] = 1/(1 + kl/self.k)
 
-        self.prob = np.clip(self.prob, 1/self.dim_uss, 1).tolist()
+        self.prob = np.clip(self.prob, 1/self.dim_uss, 1)
+
+    @staticmethod
+    @jit(nopython = True)
+    def _func(gene_pa, gene_pb, skf_oa, skf_ob, dim_uss, nc, pcd, gene_p_of_oa, gene_p_of_ob):
+        u = np.random.rand(dim_uss)
+        beta = np.where(u < 0.5, (2*u)**(1/(nc +1)), (2 * (1 - u))**(-1 / (nc + 1)))
+
+        idx_crossover = (pcd > np.random.rand(dim_uss))
+
+        if np.all(idx_crossover == 0) or np.all(gene_pa[idx_crossover] == gene_pb[idx_crossover]):
+            # alway crossover -> new individual
+            idx_notsame = np.where(gene_pa != gene_pb)[0]
+            if len(idx_notsame) == 0:
+                idx_crossover = np.ones((dim_uss, ), dtype= np.bool_)
+            else:
+                idx_crossover[np.random.choice(idx_notsame)] = True
+
+        #like pa
+        gene_oa = np.where(idx_crossover, np.clip(0.5*((1 + beta) * gene_pa + (1 - beta) * gene_pb), 0, 1), gene_p_of_oa)
+        #like pb
+        gene_ob = np.where(idx_crossover, np.clip(0.5*((1 - beta) * gene_pa + (1 + beta) * gene_pb), 0, 1), gene_p_of_ob)
+
+        #swap
+        if skf_ob == skf_oa:
+            idx_swap = np.where(np.logical_and(np.random.rand(dim_uss) < 0.5, idx_crossover))[0]
+            gene_oa[idx_swap], gene_ob[idx_swap] = gene_ob[idx_swap], gene_oa[idx_swap]
+    
+        return gene_oa, gene_ob
+        
 
     def __call__(self, pa: Individual, pb: Individual, skf_oa=None, skf_ob=None, *args, **kwargs) -> Tuple[Individual, Individual]:
+        s_time = time.time()
         if skf_oa == pa.skill_factor:
             p_of_oa = pa
         elif skf_oa == pb.skill_factor:
@@ -46,33 +79,14 @@ class KL_SBXCrossover(AbstractCrossover):
             p_of_ob = pa
         else:
             raise ValueError()
-        
-        u = np.random.rand(self.dim_uss)
 
-        beta = np.where(u < 0.5, (2*u)**(1/(self.nc +1)), (2 * (1 - u))**(-1 / (self.nc + 1)))
+        gene_oa, gene_ob = self.__class__._func(pa.genes, pb.genes, skf_oa, skf_ob, self.dim_uss, self.nc, self.prob[pa.skill_factor][pb.skill_factor], p_of_oa.genes, p_of_ob.genes)
 
-        idx_crossover = np.random.rand(self.dim_uss) < self.prob[pa.skill_factor][pb.skill_factor]
+        oa = self.IndClass(gene_oa)
+        ob = self.IndClass(gene_ob)
 
-        if np.all(idx_crossover == 0) or np.all(pa[idx_crossover] == pb[idx_crossover]):
-            # alway crossover -> new individual
-            idx_notsame = np.where(pa.genes != pb.genes)[0].tolist()
-            if len(idx_notsame) == 0:
-                idx_crossover = np.ones((self.dim_uss, ))
-            else:
-                idx_crossover[np.random.choice(idx_notsame)] = 1
-
-        #like pa
-        oa = self.IndClass(np.where(idx_crossover, np.clip(0.5*((1 + beta) * pa.genes + (1 - beta) * pb.genes), 0, 1), p_of_oa))
-        #like pb
-        ob = self.IndClass(np.where(idx_crossover, np.clip(0.5*((1 - beta) * pa.genes + (1 + beta) * pb.genes), 0, 1), p_of_ob))
-
-        #swap
-        if skf_ob == skf_oa:
-            idx_swap = np.where(np.random.rand(self.dim_uss) < 0.5)[0]
-            oa.genes[idx_swap], ob.genes[idx_swap] = ob.genes[idx_swap], oa.genes[idx_swap]
-        
         oa.skill_factor = skf_oa
         ob.skill_factor = skf_ob
 
+        self.count_time += (time.time() - s_time)
         return oa, ob
-

@@ -47,23 +47,25 @@ class AbstractFunc(AbstractTask):
             x_encode = (x_encode - self.bound[0])/(self.bound[1] - self.bound[0])
         return x_encode 
 
-    def decode(self, x):
+    @staticmethod
+    # @jit(nopython = True)
+    def decode(x, dim, limited_space, bound, rotation_matrix, shift):
         '''
         decode x from [0, 1] to bound
         '''
-        x_decode = x[:self.dim]
-        if self.limited_space == True:
-            x_decode = x_decode * (self.bound[1] - self.bound[0]) + self.bound[0]
-        x_decode = self.rotation_matrix @ (x_decode - self.shift) 
-        return x_decode
+        x_decode = x[:dim]
+        if limited_space == True:
+            x_decode = x_decode * (bound[1] - bound[0]) + bound[0]
+        x_decode = rotation_matrix @ (x_decode - shift) 
+        return x_decode 
 
     def __call__(self, x):
-        x = self.decode(x)
-        return self.__class__.func(x)
+        x = self.__class__.decode(x, self.dim, self.limited_space, self.bound, self.rotation_matrix, self.shift)
+        return self.__class__._func(x)
 
     @staticmethod
     @jit(nopython = True)
-    def func(x):
+    def _func(x):
         pass
 
 class Sphere(AbstractFunc):
@@ -76,7 +78,7 @@ class Sphere(AbstractFunc):
 
     @staticmethod
     @jit(nopython = True)
-    def func(x):
+    def _func(x):
         '''
         Request: input x is encoded
         '''
@@ -96,7 +98,7 @@ class Weierstrass(AbstractFunc):
 
     @staticmethod
     @jit(nopython = True)
-    def func(x, dim, params: dict):
+    def _func(x, dim, params: dict):
         '''
         Request: input x is encoded
         '''
@@ -111,8 +113,8 @@ class Weierstrass(AbstractFunc):
         return left - right
 
     def __call__(self, x):
-        x = self.decode(x)
-        return __class__.func(x,self.dim, self.params)
+        x = self.__class__.decode(x, self.dim, self.limited_space, self.bound, self.rotation_matrix, self.shift)
+        return __class__._func(x,self.dim, self.params)
 
 class Ackley(AbstractFunc):
     '''
@@ -132,7 +134,7 @@ class Ackley(AbstractFunc):
 
     @staticmethod
     @jit(nopython = True)
-    def func(x, fixed, params):
+    def _func(x, fixed, params):
         if fixed:
             return -params['a'] * np.exp(-params['b']*np.sqrt(np.mean(x**2)))\
             - np.exp(np.mean(np.cos(params['c'] * x)))\
@@ -146,8 +148,8 @@ class Ackley(AbstractFunc):
             + np.exp(1)
 
     def __call__(self, x):
-        x = self.decode(x)
-        return __class__.func(x, self.fixed, self.params)
+        x = self.__class__.decode(x, self.dim, self.limited_space, self.bound, self.rotation_matrix, self.shift)
+        return __class__._func(x, self.fixed, self.params)
 
 class Rosenbrock(AbstractFunc):
     '''
@@ -159,7 +161,7 @@ class Rosenbrock(AbstractFunc):
 
     @staticmethod
     @jit(nopython = True)
-    def func(x):
+    def _func(x):
         l = 100*np.sum((x[1:] - x[:-1]**2) ** 2)
         r = np.sum((x[:-1] - 1) ** 2)
         return l + r
@@ -181,15 +183,15 @@ class Schwefel(AbstractFunc):
 
     @staticmethod
     @jit(nopython = True)
-    def func(x, dim, fixed):
+    def _func(x, dim, fixed):
         if fixed:
             return (418.9828872724336455576189785193) * dim - np.sum(x * np.sin(np.sqrt(np.abs(x)))) 
         else:
             return 418.9829 * dim - np.sum(x * np.sin(np.sqrt(np.abs(x)))) 
     
     def __call__(self, x):
-        x = self.decode(x)
-        return __class__.func(x, self.dim, self.fixed)
+        x =   self.__class__.decode(x, self.dim, self.limited_space, self.bound, self.rotation_matrix, self.shift)
+        return __class__._func(x, self.dim, self.fixed)
 
 class Griewank(AbstractFunc):
     ''' 
@@ -201,14 +203,14 @@ class Griewank(AbstractFunc):
     
     @staticmethod
     @jit(nopython = True)
-    def func(x, dim):
+    def _func(x, dim):
         return np.sum(x**2) / 4000 \
             - np.prod(np.cos(x / np.sqrt((np.arange(dim) + 1))))\
             + 1
 
     def __call__(self, x):
-        x = self.decode(x)
-        return __class__.func(x, self.dim)
+        x =   self.__class__.decode(x, self.dim, self.limited_space, self.bound, self.rotation_matrix, self.shift)
+        return __class__._func(x, self.dim)
 
 class Rastrigin(AbstractFunc):
     ''' 
@@ -220,12 +222,12 @@ class Rastrigin(AbstractFunc):
     
     @staticmethod
     @jit(nopython = True)
-    def func(x, dim):
+    def _func(x, dim):
         return 10 * dim + np.sum(x ** 2 - 10 * np.cos(2 * np.pi * x))
     
     def __call__(self, x):
-        x = self.decode(x)
-        return __class__.func(x, self.dim)
+        x =   self.__class__.decode(x, self.dim, self.limited_space, self.bound, self.rotation_matrix, self.shift)
+        return __class__._func(x, self.dim)
         
 
 

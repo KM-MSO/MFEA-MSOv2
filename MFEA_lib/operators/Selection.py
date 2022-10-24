@@ -1,7 +1,8 @@
 from copy import deepcopy
 from math import ceil
 from typing import Type, List
- 
+import time
+
 import numpy as np
 from ..EA import *
 
