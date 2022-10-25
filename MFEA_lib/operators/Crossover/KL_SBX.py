@@ -64,7 +64,7 @@ class KL_SBXCrossover(AbstractCrossover):
         # if swap:
             # idx_swap = np.where(np.logical_and(np.random.rand(dim_uss) < 0.5, idx_crossover))[0]
             # idx_swap = np.where(np.random.rand(dim_uss) < 0.5)[0]
-        idx_swap = np.where(np.logical_and(np.random.rand(dim_uss) < 0.5, pcd > conf_thres))[0]
+        idx_swap = np.where(np.logical_and(np.random.rand(dim_uss) < 0.5, pcd >= conf_thres))[0]
         gene_oa[idx_swap], gene_ob[idx_swap] = gene_ob[idx_swap], gene_oa[idx_swap]
     
         return gene_oa, gene_ob
