@@ -2,7 +2,6 @@ import numpy as np
 
 from ...EA import Individual
 from . import AbstractMutation
-import time
 
 class PolynomialMutation(AbstractMutation):
     '''
@@ -16,10 +15,8 @@ class PolynomialMutation(AbstractMutation):
         super().__init__(*arg, **kwargs)
         self.nm = nm
         self.pm = pm
-        self.count_time = 0
 
     def __call__(self, ind: Individual, return_newInd:bool, *arg, **kwargs) -> Individual:
-        s_time = time.time()
         idx_mutation = np.where(np.random.rand(self.dim_uss) <= self.pm)[0]
 
         u = np.zeros((self.dim_uss,)) + 0.5
@@ -43,7 +40,6 @@ class PolynomialMutation(AbstractMutation):
                 parent= ind
             )
             newInd.skill_factor = ind.skill_factor
-            self.count_time += (time.time() - s_time)
             return newInd
         else:
             ind.genes = np.where(delta < 0,
@@ -54,6 +50,5 @@ class PolynomialMutation(AbstractMutation):
             )
             ind.fcost = None
 
-            self.count_time += (time.time() - s_time)
             return ind
     
