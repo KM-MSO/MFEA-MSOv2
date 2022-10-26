@@ -360,4 +360,6 @@ def loadModel(PATH: str, ls_tasks=None, set_attribute=False) -> AbstractModel:
                 # submodel.crossover.tasks = ls_tasks
                 # submodel.mutation.tasks = ls_tasks
 
+    if model.name.split('.')[-1] == 'AbstractModel':
+        model.name = path_tmp.name.split('.')[0]
     return model

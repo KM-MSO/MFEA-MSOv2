@@ -17,7 +17,7 @@ class MultiBenchmark():
         self.fit_kwargs = kwargs 
     
     def run(self,nb_run = 1, save_path = './RESULTS/result/'): 
-        self.ls_model = [] 
+        self.ls_model:list[MultiTimeModel] = [] 
         for idx, benchmark in enumerate(self.ls_benchmark): 
             self.compile_kwargs['tasks'] = benchmark 
             self.compile_kwargs['IndClass'] = self.ls_IndClass[idx] 

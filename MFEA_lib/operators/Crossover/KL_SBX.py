@@ -26,7 +26,8 @@ class KL_SBXCrossover(AbstractCrossover):
         for i in range(nb_tasks):
             for j in range(nb_tasks):
                 kl = np.log((std[i] + 1e-50)/(std[j] + 1e-50)) + (std[j] ** 2 + (mean[j] - mean[i]) ** 2)/(2 * std[i] ** 2 + 1e-50) - 1/2
-                prob[i][j] = 1/(1 + kl/k)
+                # prob[i][j] = 1/(1 + kl/k)
+                prob[i][j] = np.exp(-kl/k)
 
         return np.clip(prob, 1/dim_uss, 1)
 
