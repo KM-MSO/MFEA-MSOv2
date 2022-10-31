@@ -180,7 +180,6 @@ class MultiTimeModel:
             if seed_arr is not None:
                 assert np.all(
                     seed_arr == self.ls_seed), '`seed_arr` is not like `ls_seed`'
-
             index_start = len(self.ls_model)
         elif self.status == 'Done':
             print('Model has already completed before.')
@@ -188,7 +187,12 @@ class MultiTimeModel:
         else:
             raise ValueError('self.status is not NotRun | Running | Done')
 
-        for idx_seed in range(index_start, len(self.ls_seed)):
+        for stt, idx_seed in enumerate(range(index_start, len(self.ls_seed))):
+
+            from IPython.display import display, clear_output
+            stt_line = "STT: " + str(stt)
+            display(stt_line)
+
             try:
                 model = self.model(self.ls_seed[idx_seed])
                 

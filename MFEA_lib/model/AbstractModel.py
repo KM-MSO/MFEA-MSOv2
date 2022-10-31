@@ -115,8 +115,8 @@ class model():
             if use_sys is True: 
                 # sys.stdout.write("\r" + "time: %02dm %.02fs  "%(minutes, seconds))
                 # sys.stdout.write(process_line+ " ")
-                seed_line= "Seed: " + str(self.seed) + " -- "
-                print_line =seed_line + print_line + "Time: %02dm %2.02fs "%(minutes, seconds) + " " +process_line
+                seed_line= "Seed: "  + str(self.seed) + " -- "
+                print_line =seed_line + print_line + "Time: %02dm %2.02fs "%(minutes, seconds) + " " + process_line
                 
             else: 
                 display("Time: %02dm %2.02fs "%(minutes, seconds))
