@@ -3,44 +3,73 @@ from typing import Tuple, Type, List
 
 from ...tasks.task import AbstractTask
 from ...EA import Individual, Population
+from numba import jit
 from . import AbstractCrossover
-# import pandas as pd
-
-# df = pd.DataFrame({
-#     'epoch': [],
-#     '5-1': [],
-#     ''
-# })
 class KL_SBXCrossover(AbstractCrossover):
     '''
     pa, pb in [0, 1]^n
     '''
-    def __init__(self, nc = 2, k = 1, len_mem = 6, *args, **kwargs):
+    def __init__(self, nc = 2, k = 1, conf_thres= 0.6, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.nc = nc
         self.k = k
-        # self.len_mem = len_mem
+        self.conf_thres = conf_thres
     
     def getInforTasks(self, IndClass: Type[Individual], tasks: List[AbstractTask], seed=None):
         super().getInforTasks(IndClass, tasks, seed)
         # self.prob = 1 - KL_divergence
-        self.prob = [[np.ones((self.dim_uss, )) for i in range(self.nb_tasks)] for j in range(self.nb_tasks)]
-        # self.M = [Deque(np.random.rand(self.len_mem), maxlen= self.len_mem) for i in range(self.nb_tasks)]
+        self.prob = np.ones((self.nb_tasks, self.nb_tasks, self.dim_uss))
+
+    @staticmethod
+    @jit(nopython= True)
+    def _updateProb(prob, k, dim_uss, nb_tasks, mean, std):
+        for i in range(nb_tasks):
+            for j in range(nb_tasks):
+                kl = np.log((std[i] + 1e-50)/(std[j] + 1e-50)) + (std[j] ** 2 + (mean[j] - mean[i]) ** 2)/(2 * std[i] ** 2 + 1e-50) - 1/2
+                # prob[i][j] = 1/(1 + kl/k)
+                prob[i][j] = np.exp(-kl/k)
+
+        return np.clip(prob, 1/dim_uss, 1)
 
     def update(self, population: Population, **kwargs) -> None:
-        mean: list = np.empty((self.nb_tasks, )).tolist()
-        std: list = np.empty((self.nb_tasks, )).tolist()
+        mean = np.zeros((self.nb_tasks, self.dim_uss))
+        std = np.zeros((self.nb_tasks, self.dim_uss))
         for idx_subPop in range(self.nb_tasks):
-            mean[idx_subPop] = np.mean(population[idx_subPop].ls_inds, axis = 0)
-            std[idx_subPop] = np.std(population[idx_subPop].ls_inds, axis = 0)
+            mean[idx_subPop] = population[idx_subPop].__meanInds__
+            std[idx_subPop] = population[idx_subPop].__stdInds__
 
-        for i in range(self.nb_tasks):
-            for j in range(self.nb_tasks):
-                kl = np.log((std[i] + 1e-50)/(std[j] + 1e-50)) + (std[j] ** 2 + (mean[j] - mean[i]) ** 2)/(2 * std[i] ** 2 + 1e-50) - 1/2
-                self.prob[i][j] = 1/(1 + kl/self.k)
+        self.prob = self.__class__._updateProb(self.prob, self.k, self.dim_uss, self.nb_tasks, mean, std)
 
-        self.prob = np.clip(self.prob, 1/self.dim_uss, 1).tolist()
+    @staticmethod
+    @jit(nopython = True)
+    def _crossover(gene_pa, gene_pb, swap, conf_thres, dim_uss, nc, pcd, gene_p_of_oa, gene_p_of_ob):
+        u = np.random.rand(dim_uss)
+        beta = np.where(u < 0.5, (2*u)**(1/(nc +1)), (2 * (1 - u))**(-1 / (nc + 1)))
 
+        idx_crossover = np.random.rand(dim_uss) < pcd
+
+        if np.all(idx_crossover == 0) or np.all(gene_pa[idx_crossover] == gene_pb[idx_crossover]):
+            # alway crossover -> new individual
+            idx_notsame = np.where(gene_pa != gene_pb)[0]
+            if len(idx_notsame) == 0:
+                idx_crossover = np.ones((dim_uss, ), dtype= np.bool_)
+            else:
+                idx_crossover[np.random.choice(idx_notsame)] = True
+
+        #like pa
+        gene_oa = np.where(idx_crossover, np.clip(0.5*((1 + beta) * gene_pa + (1 - beta) * gene_pb), 0, 1), gene_p_of_oa)
+        #like pb
+        gene_ob = np.where(idx_crossover, np.clip(0.5*((1 - beta) * gene_pa + (1 + beta) * gene_pb), 0, 1), gene_p_of_ob)
+
+        #swap
+        # if swap:
+            # idx_swap = np.where(np.logical_and(np.random.rand(dim_uss) < 0.5, idx_crossover))[0]
+            # idx_swap = np.where(np.random.rand(dim_uss) < 0.5)[0]
+        idx_swap = np.where(np.logical_and(np.random.rand(dim_uss) < 0.5, pcd >= conf_thres))[0]
+        gene_oa[idx_swap], gene_ob[idx_swap] = gene_ob[idx_swap], gene_oa[idx_swap]
+    
+        return gene_oa, gene_ob
+        
     def __call__(self, pa: Individual, pb: Individual, skf_oa=None, skf_ob=None, *args, **kwargs) -> Tuple[Individual, Individual]:
         if skf_oa == pa.skill_factor:
             p_of_oa = pa
@@ -54,33 +83,17 @@ class KL_SBXCrossover(AbstractCrossover):
             p_of_ob = pa
         else:
             raise ValueError()
-        
-        u = np.random.rand(self.dim_uss)
 
-        beta = np.where(u < 0.5, (2*u)**(1/(self.nc +1)), (2 * (1 - u))**(-1 / (self.nc + 1)))
+        # skf_pa == skf_pb => skf_oa == skf_ob
+        # skf_pa != skf_pb => skf_oa == skf_ob || skf_oa != skf_ob
+        gene_oa, gene_ob = self.__class__._crossover(pa.genes, pb.genes, skf_oa == skf_ob, self.conf_thres, self.dim_uss, self.nc, self.prob[pa.skill_factor][pb.skill_factor], p_of_oa.genes, p_of_ob.genes)
+        # gene_oa, gene_ob = self.__class__._crossover(pa.genes, pb.genes, 
+        #     ((pa.skill_factor == pb.skill_factor) + (skf_oa == skf_ob))/2, self.dim_uss, self.nc, self.prob[pa.skill_factor][pb.skill_factor], p_of_oa.genes, p_of_ob.genes)
 
-        idx_crossover = np.random.rand(self.dim_uss) < self.prob[pa.skill_factor][pb.skill_factor]
+        oa = self.IndClass(gene_oa)
+        ob = self.IndClass(gene_ob)
 
-        if np.all(idx_crossover == 0) or np.all(pa[idx_crossover] == pb[idx_crossover]):
-            # alway crossover -> new individual
-            idx_notsame = np.where(pa.genes != pb.genes)[0].tolist()
-            if len(idx_notsame) == 0:
-                idx_crossover = np.ones((self.dim_uss, ))
-            else:
-                idx_crossover[np.random.choice(idx_notsame)] = 1
-
-        #like pa
-        oa = self.IndClass(np.where(idx_crossover, np.clip(0.5*((1 + beta) * pa.genes + (1 - beta) * pb.genes), 0, 1), p_of_oa))
-        #like pb
-        ob = self.IndClass(np.where(idx_crossover, np.clip(0.5*((1 - beta) * pa.genes + (1 + beta) * pb.genes), 0, 1), p_of_ob))
-
-        #swap
-        if skf_ob == skf_oa:
-            idx_swap = np.where(np.random.rand(self.dim_uss) < 0.5)[0]
-            oa.genes[idx_swap], ob.genes[idx_swap] = ob.genes[idx_swap], oa.genes[idx_swap]
-        
         oa.skill_factor = skf_oa
         ob.skill_factor = skf_ob
 
         return oa, ob
-

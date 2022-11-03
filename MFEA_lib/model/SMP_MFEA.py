@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from numba import jit
 
 from ..EA import *
 from ..operators import Crossover, Mutation, Search, Selection
 from ..tasks.task import AbstractTask
 from . import AbstractModel
-
+from ..numba_utils import numba_randomchoice_w_prob
 
 class model(AbstractModel.model):
     class battle_smp:
@@ -31,11 +32,6 @@ class model(AbstractModel.model):
             self.lr = lr
 
         def get_smp(self) -> np.ndarray:
-            # smp_return : np.ndarray = np.copy(self.SMP_not_host)
-
-            # smp_return[self.idx_host] += self.p_const_intra
-            # smp_return += self.lower_p
-            # return smp_return
             return np.copy(self.SMP_include_host)
         
         def update_SMP(self, Delta_task, count_Delta_tasks):
@@ -74,7 +70,6 @@ class model(AbstractModel.model):
         super().compile(IndClass, tasks, crossover, mutation, selection, *args, **kwargs)
         self.search = search
         self.search.getInforTasks(IndClass, tasks, seed = self.seed)
-        # self.max_diff = [1] * len(tasks)
     
     def render_smp(self,  shape = None, title = None, figsize = None, dpi = 100, step = 1, re_fig = False, label_shape= None, label_loc= None):
         
@@ -127,7 +122,7 @@ class model(AbstractModel.model):
             return fig
 
     def fit(self, nb_generations: int, nb_inds_each_task: int, nb_inds_min = None,
-        lr = 1, p_const_intra = 0.5, swap_po = True, prob_search = 0.5, lc_nums = 100,
+        lr = 1, p_const_intra = 0.5, prob_search = 0.5, lc_nums = 100,
         nb_epochs_stop = 50, 
         evaluate_initial_skillFactor = False,
         *args, **kwargs):
@@ -157,7 +152,7 @@ class model(AbstractModel.model):
         
         # SA params:
         MAXEVALS = nb_generations * nb_inds_each_task * len(self.tasks)
-        eval_k = np.zeros(len(self.tasks))
+        eval_k = [0] * len(self.tasks)
         epoch = 0
 
         '''
@@ -185,8 +180,8 @@ class model(AbstractModel.model):
         Delta:List[List[float]] = np.zeros((len(self.tasks), len(self.tasks) + 1)).tolist()
         count_Delta: List[List[float]] = np.zeros((len(self.tasks), len(self.tasks) + 1)).tolist()
 
-        while np.sum(eval_k) <= MAXEVALS:
-            turn_eval = [0] * len(self.tasks)
+        while sum(eval_k) <= MAXEVALS:
+            turn_eval = 0
 
             # initial offspring_population of generation
             offsprings = Population(
@@ -195,9 +190,8 @@ class model(AbstractModel.model):
                 dim =  self.dim_uss, 
                 list_tasks= self.tasks,
             )
-
-            while np.sum( turn_eval) < np.sum(nb_inds_tasks):
-                if np.sum(eval_k) >= epoch * nb_inds_each_task * len(self.tasks):
+            while turn_eval < sum(nb_inds_tasks):
+                if sum(eval_k) >= epoch * nb_inds_each_task * len(self.tasks):
                     # save history
                     self.history_cost.append([ind.fcost for ind in population.get_solves()])
                     self.history_smp.append([M_smp[i].get_smp() for i in range(len(self.tasks))])
@@ -206,10 +200,11 @@ class model(AbstractModel.model):
 
                     epoch += 1
 
+                
                 if np.random.rand() < prob_search:
                     for i in range(2):
                         # choose subpop of father pa
-                        skf_pa = np.random.choice(np.arange(len(p_choose_father)), p= p_choose_father)
+                        skf_pa = numba_randomchoice_w_prob(p_choose_father)
                     
                         idx = np.random.randint(0, len(population[skf_pa]))
                         pa = population[skf_pa][idx]
@@ -219,34 +214,32 @@ class model(AbstractModel.model):
                             pa.fcost = new_ind.fcost
                             population[skf_pa].update_rank()
                         eval_k[skf_pa] += 1
-                        turn_eval[skf_pa] += 1
+                        turn_eval += 1
                 else:
                     # choose subpop of father pa
-                    skf_pa = np.random.choice(np.arange(len(p_choose_father)), p= p_choose_father)
-                
+                    skf_pa = numba_randomchoice_w_prob(p_choose_father)
+
+
                     # get smp 
                     smp = M_smp[skf_pa].get_smp()
 
+
                     # choose subpop of mother pb
-                    skf_pb = np.random.choice(np.arange(len(smp)), p= smp)
+                    skf_pb = numba_randomchoice_w_prob(smp)
 
                     if skf_pb != len(self.tasks):
-                        pa = population[skf_pa].__getRandomItems__()
-                        pb = population[skf_pb].__getRandomItems__()
-                        while pb is pa:
+                        if skf_pa == skf_pb:
+                            pa, pb = population[skf_pa].__getRandomItems__(size= 2, replace=False)
+                        else:
+                            pa = population[skf_pa].__getRandomItems__()
                             pb = population[skf_pb].__getRandomItems__()
 
                         if np.all(pa.genes == pb.genes):
                             pb = population[skf_pb].__getWorstIndividual__
                             
-                        if pa < pb:
-                            pa, pb = pb, pa
-
                         oa, ob = self.crossover(pa, pb, skf_pa, skf_pa, population)
                     else:
                         pa, pb = population.__getIndsTask__(skf_pa, type= 'random', size= 2)
-                        if pa < pb:
-                            pa, pb = pb, pa
 
                         oa = self.mutation(pa, return_newInd= True)
                         oa.skill_factor = skf_pa
@@ -254,14 +247,13 @@ class model(AbstractModel.model):
                         ob = self.mutation(pb, return_newInd= True)
                         ob.skill_factor = skf_pa
 
-
                     # add oa, ob to offsprings population and eval fcost
                     offsprings.__addIndividual__(oa)
                     offsprings.__addIndividual__(ob)
-                    
+
                     count_Delta[skf_pa][skf_pb] += 2
                     eval_k[skf_pa] += 2
-                    turn_eval[skf_pa] += 2
+                    turn_eval += 2
 
                     # Calculate the maximum improvement percetage
                     Delta1 = (pa.fcost - oa.fcost) / (pa.fcost ** 2 + 1e-50)
@@ -272,19 +264,6 @@ class model(AbstractModel.model):
 
                     # update smp
                     if Delta1 > 0 or Delta2 > 0:
-                        # swap
-                        if swap_po:
-                            if Delta1 > Delta2:
-                                # swap oa (-2) with pa 
-                                offsprings[skf_pa].ls_inds[-2], population[skf_pa].ls_inds[population[skf_pa].ls_inds.index(pa)] = pa, oa
-                                if Delta2 > 0 and skf_pa == skf_pb:
-                                    #swap ob (-1) with pb 
-                                    offsprings[skf_pa].ls_inds[-1], population[skf_pa].ls_inds[population[skf_pa].ls_inds.index(pb)] = pb, ob
-                            else:
-                                #swap ob (-1) with pa 
-                                offsprings[skf_pa].ls_inds[-1], population[skf_pa].ls_inds[population[skf_pa].ls_inds.index(pa)] = pa, ob
-                                if Delta1 > 0 and skf_pa == skf_pb:
-                                    offsprings[skf_pa].ls_inds[-2], population[skf_pa].ls_inds[population[skf_pa].ls_inds.index(pb)] = pb, oa
                         # reset count_eval_stop
                         count_eval_stop[skf_pa] = 0
                     else:
@@ -299,6 +278,7 @@ class model(AbstractModel.model):
             # merge
             population = population + offsprings
             population.update_rank()
+
 
             # selection
             nb_inds_tasks = [int(
@@ -320,7 +300,6 @@ class model(AbstractModel.model):
             Delta:List[List[float]] = np.zeros((len(self.tasks), len(self.tasks) + 1)).tolist()
             count_Delta: List[List[float]] = np.zeros((len(self.tasks), len(self.tasks) + 1)).tolist()
 
-
             # '''local search'''
             # if epoch % lc_nums == 0: 
             #     for skf in range(len(self.tasks)): 
@@ -333,7 +312,6 @@ class model(AbstractModel.model):
             #             population[skf].ls_inds[0].genes= new_ind.genes 
             #             population[skf].ls_inds[0].fcost = new_ind.fcost
             #             population.update_rank()  
-
 
 
 

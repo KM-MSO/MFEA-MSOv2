@@ -1,6 +1,8 @@
 import random
 import numpy as np
 from typing import Type, List
+from numba import jit
+from .numba_utils import numba_RandomIndex
 
 from .tasks.task import AbstractTask
 
@@ -127,13 +129,13 @@ class SubPopulation:
                 return [self.ls_inds[i] for i in index]
             else:
                 raise TypeError('Int, Slice or List[int], not ' + str(type(index)))
-
+    
     def __getRandomItems__(self, size:int = None, replace:bool = False):
         if size == 0:
             return []
         if size == None:
-            return self.ls_inds[np.random.choice(len(self), size = None, replace= replace)]
-        return [self.ls_inds[idx] for idx in np.random.choice(len(self), size= size, replace= replace).tolist()]
+            return self.ls_inds[numba_RandomIndex(len(self), size= None, replace= replace)]
+        return [self.ls_inds[idx] for idx in numba_RandomIndex(len(self), size= size, replace= replace).tolist()]
 
 
     def __addIndividual__(self, individual: Individual, update_rank = False):
@@ -163,12 +165,44 @@ class SubPopulation:
     @property 
     def __getWorstIndividual__(self):
         return self.ls_inds[int(np.argmax(self.factorial_rank))]
+    
+    @staticmethod
+    @jit(nopython = True)
+    def _numba_meanInds(ls_genes):
+        res = [np.mean(ls_genes[:, i]) for i in range(ls_genes.shape[1])]
+        return np.array(res)
+
+    @property 
+    def __meanInds__(self):
+        # return self.__class__._numba_meanInds(np.array([ind.genes for ind in self.ls_inds]))
+        return np.mean([ind.genes for ind in self.ls_inds], axis= 0)
+
+    @staticmethod
+    @jit(nopython = True)
+    def _numba_stdInds(ls_genes):
+        res = [np.std(ls_genes[:, i]) for i in range(ls_genes.shape[1])]
+        return np.array(res)
+
+
+    @property 
+    def __stdInds__(self):
+        # return self.__class__._numba_stdInds(np.array([ind.genes for ind in self.ls_inds]))
+        return np.std([ind.genes for ind in self.ls_inds], axis= 0)
+
+    @staticmethod
+    @jit(nopython = True)
+    def _sort_rank(ls_fcost):
+        return np.argsort(np.argsort(ls_fcost)) + 1
 
     def update_rank(self):
         '''
         Update `factorial_rank` and `scalar_fitness`
         '''
-        self.factorial_rank = np.argsort(np.argsort([ind.fcost for ind in self.ls_inds])) + 1
+        # self.factorial_rank = np.argsort(np.argsort([ind.fcost for ind in self.ls_inds])) + 1
+        if len(self.ls_inds):
+            self.factorial_rank = self.__class__._sort_rank(np.array([ind.fcost for ind in self.ls_inds]))
+        else:
+            self.factorial_rank = np.array([])
         self.scalar_fitness = 1/self.factorial_rank
 
     def select(self, index_selected_inds: list):
@@ -225,7 +259,8 @@ class Population:
             
             while not np.all(count_inds == nb_inds_tasks) :
                 # random task do not have enough individual
-                idx_task = np.random.choice(np.where(count_inds < nb_inds_tasks)[0])
+                idx_task = numba_RandomIndex(np.where(count_inds < nb_inds_tasks)[0])
+
                 # get best individual of task
                 idx_ind = np.argsort(matrix_rank_pop[:, idx_task])[0]
 
@@ -281,10 +316,10 @@ class Population:
             idx_inds = np.where(self.ls_subPop[idx_task].factorial_rank <=  max(p_ontop * len(self[idx_task]),2) )[0]
             if size == None:
                 return self.ls_subPop[idx_task].ls_inds[
-                    np.random.choice(idx_inds, size = None, replace= replace)
+                    numba_RandomIndex(idx_inds, size = None, replace= replace)
                 ]
 
-            return [self.ls_subPop[idx_task].ls_inds[idx] for idx in idx_inds[np.random.choice(len(idx_inds), size = size, replace= replace)].tolist()]
+            return [self.ls_subPop[idx_task].ls_inds[idx] for idx in idx_inds[numba_RandomIndex(len(idx_inds), size = size, replace= replace)].tolist()]
         else:
             raise ValueError('`type` ==  random | tournament | ontop, not equal ' + type)
         
@@ -294,7 +329,7 @@ class Population:
             return self.ls_subPop[np.random.randint(0, self.nb_tasks)].__getRandomItems__(None, replace) 
         else:
             nb_randInds = [0] * self.nb_tasks
-            for idx in np.random.choice(self.nb_tasks, size = size, replace= True).tolist():
+            for idx in numba_RandomIndex(self.nb_tasks, size = size, replace= True).tolist():
                 nb_randInds[idx] += 1
 
             res = []
@@ -327,7 +362,6 @@ class Population:
             for idx in range(self.nb_tasks)
         ]
         return newPop
-
 
 # class LSHADE_Population(Population): 
 #     def __init__(self, IndClass: Type[Individual], dim, nb_inds_tasks: List[int], list_tasks:List[AbstractTask] = [], evaluate_initial_skillFactor = False) -> None:
