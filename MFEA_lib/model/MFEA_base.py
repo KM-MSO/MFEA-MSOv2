@@ -2,6 +2,7 @@ import numpy as np
 from . import AbstractModel
 from ..operators import Crossover, Mutation, Selection
 from ..tasks.task import AbstractTask
+from ..numba_utils import numba_randomchoice
 from ..EA import *
 
 class model(AbstractModel.model):
@@ -10,7 +11,7 @@ class model(AbstractModel.model):
         tasks: List[AbstractTask], 
         crossover: Crossover.SBX_Crossover, mutation: Mutation.PolynomialMutation, selection: Selection.ElitismSelection, 
         *args, **kwargs):
-        return super().compile(IndClass, tasks, crossover, mutation, selection, *args, **kwargs)
+        super().compile(IndClass, tasks, crossover, mutation, selection, *args, **kwargs)
     
     def fit(self, nb_generations, rmp = 0.3, nb_inds_each_task = 100, evaluate_initial_skillFactor = True, *args, **kwargs) -> List[Individual]:
         super().fit(*args, **kwargs)
@@ -28,7 +29,7 @@ class model(AbstractModel.model):
         self.history_cost.append([ind.fcost for ind in population.get_solves()])
         
         self.render_process(0, ['Cost'], [self.history_cost[-1]], use_sys= True)
-        
+
         for epoch in range(nb_generations):
             
             # initial offspring_population of generation
@@ -42,14 +43,11 @@ class model(AbstractModel.model):
             # create offspring pop
             while len(offsprings) < len(population):
                 # choose parent 
-                # pa, pb = population.__getRandomInds__(2)
-
-                pa = population.__getRandomInds__()
-                pb = population.__getRandomInds__()
+                pa, pb = population.__getRandomInds__(2)
 
                 if pa.skill_factor == pb.skill_factor or random.random() < rmp:
                     # intra / inter crossover
-                    skf_oa, skf_ob = np.random.choice([pa.skill_factor, pb.skill_factor], size= 2, replace= True)
+                    skf_oa, skf_ob = numba_randomchoice(np.array([pa.skill_factor, pb.skill_factor]), size= 2, replace= True)
                     oa, ob = self.crossover(pa, pb, skf_oa, skf_ob)
                 else:
                     # mutate

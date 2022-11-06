@@ -2,7 +2,7 @@ import random
 import numpy as np
 from typing import Type, List
 from numba import jit
-from .numba_utils import numba_RandomIndex
+from .numba_utils import numba_randomchoice
 
 from .tasks.task import AbstractTask
 
@@ -134,8 +134,8 @@ class SubPopulation:
         if size == 0:
             return []
         if size == None:
-            return self.ls_inds[numba_RandomIndex(len(self), size= None, replace= replace)]
-        return [self.ls_inds[idx] for idx in numba_RandomIndex(len(self), size= size, replace= replace).tolist()]
+            return self.ls_inds[numba_randomchoice(len(self), size= None, replace= replace)]
+        return [self.ls_inds[idx] for idx in numba_randomchoice(len(self), size= size, replace= replace).tolist()]
 
 
     def __addIndividual__(self, individual: Individual, update_rank = False):
@@ -259,7 +259,7 @@ class Population:
             
             while not np.all(count_inds == nb_inds_tasks) :
                 # random task do not have enough individual
-                idx_task = numba_RandomIndex(np.where(count_inds < nb_inds_tasks)[0])
+                idx_task = numba_randomchoice(np.where(count_inds < nb_inds_tasks)[0])
 
                 # get best individual of task
                 idx_ind = np.argsort(matrix_rank_pop[:, idx_task])[0]
@@ -281,7 +281,7 @@ class Population:
             ]
 
     def __len__(self):
-        return np.sum([len(subPop) for subPop in self.ls_subPop])
+        return sum([len(subPop) for subPop in self.ls_subPop])
 
     def __getitem__(self, index):
         return self.ls_subPop[index]
@@ -316,10 +316,10 @@ class Population:
             idx_inds = np.where(self.ls_subPop[idx_task].factorial_rank <=  max(p_ontop * len(self[idx_task]),2) )[0]
             if size == None:
                 return self.ls_subPop[idx_task].ls_inds[
-                    numba_RandomIndex(idx_inds, size = None, replace= replace)
+                    numba_randomchoice(idx_inds, size = None, replace= replace)
                 ]
 
-            return [self.ls_subPop[idx_task].ls_inds[idx] for idx in idx_inds[numba_RandomIndex(len(idx_inds), size = size, replace= replace)].tolist()]
+            return [self.ls_subPop[idx_task].ls_inds[idx] for idx in idx_inds[numba_randomchoice(len(idx_inds), size = size, replace= replace)].tolist()]
         else:
             raise ValueError('`type` ==  random | tournament | ontop, not equal ' + type)
         
@@ -329,7 +329,7 @@ class Population:
             return self.ls_subPop[np.random.randint(0, self.nb_tasks)].__getRandomItems__(None, replace) 
         else:
             nb_randInds = [0] * self.nb_tasks
-            for idx in numba_RandomIndex(self.nb_tasks, size = size, replace= True).tolist():
+            for idx in numba_randomchoice(self.nb_tasks, size = size, replace= True).tolist():
                 nb_randInds[idx] += 1
 
             res = []
