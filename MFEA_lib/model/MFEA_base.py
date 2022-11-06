@@ -42,9 +42,12 @@ class model(AbstractModel.model):
             # create offspring pop
             while len(offsprings) < len(population):
                 # choose parent 
-                pa, pb = population.__getRandomInds__(2)
+                # pa, pb = population.__getRandomInds__(2)
 
-                if pa.skill_factor == pb.skill_factor or np.random.rand() < rmp:
+                pa = population.__getRandomInds__()
+                pb = population.__getRandomInds__()
+
+                if pa.skill_factor == pb.skill_factor or random.random() < rmp:
                     # intra / inter crossover
                     skf_oa, skf_ob = np.random.choice([pa.skill_factor, pb.skill_factor], size= 2, replace= True)
                     oa, ob = self.crossover(pa, pb, skf_oa, skf_ob)

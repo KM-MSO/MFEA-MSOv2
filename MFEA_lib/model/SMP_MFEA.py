@@ -201,12 +201,12 @@ class model(AbstractModel.model):
                     epoch += 1
 
                 
-                if np.random.rand() < prob_search:
+                if random.rand() < prob_search:
                     for i in range(2):
                         # choose subpop of father pa
                         skf_pa = numba_randomchoice_w_prob(p_choose_father)
                     
-                        idx = np.random.randint(0, len(population[skf_pa]))
+                        idx = random.randint(0, len(population[skf_pa]))
                         pa = population[skf_pa][idx]
                         new_ind = self.search(ind = pa, population = population)
                         if new_ind.fcost < pa.fcost:
