@@ -22,6 +22,7 @@ class KL_SBXCrossover(AbstractCrossover):
 
     @staticmethod
     @jit(nopython= True)
+    # @jit(target_backend="cuda")
     def _updateProb(prob, k, dim_uss, nb_tasks, mean, std):
         for i in range(nb_tasks):
             for j in range(nb_tasks):
@@ -42,6 +43,7 @@ class KL_SBXCrossover(AbstractCrossover):
 
     @staticmethod
     @jit(nopython = True)
+    # @jit(target_backend="cuda")
     def _crossover(gene_pa, gene_pb, swap, conf_thres, dim_uss, nc, pcd, gene_p_of_oa, gene_p_of_ob):
         u = np.random.rand(dim_uss)
         beta = np.where(u < 0.5, (2*u)**(1/(nc +1)), (2 * (1 - u))**(-1 / (nc + 1)))
