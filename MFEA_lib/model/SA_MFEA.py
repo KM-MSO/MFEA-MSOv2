@@ -16,17 +16,29 @@ class Memory:
         self.sigma = sigma
         self.M = np.zeros((H), dtype=float) + 0.5
     
-
-    def random_Gauss(self):
-        mean = numba_randomchoice(self.M)
-
+    @staticmethod
+    @jit(nopython= True)
+    def _generate_rmp(M, sigma):
+        mean = numba_randomchoice(M)
         rmp_sampled = 0 
-        while rmp_sampled <= 0:
-            rmp_sampled = mean + self.sigma * math.sqrt(-2.0 * math.log(random.rand())) * math.sin(2.0 * math.pi * random.rand())
+        while rmp_sampled <= 0: 
+            rmp_sampled = mean + sigma *math.sqrt(-2.0 * math.log(np.random.rand())) * math.sin(2.0 * math.pi * np.random.rand())
         
-        if rmp_sampled > 1:
+        if rmp_sampled > 1: 
             return 1
         return rmp_sampled
+
+    def random_Gauss(self):
+        # mean = numba_randomchoice(self.M)
+
+        # rmp_sampled = 0 
+        # while rmp_sampled <= 0:
+        #     rmp_sampled = mean + self.sigma * math.sqrt(-2.0 * math.log(random.rand())) * math.sin(2.0 * math.pi * random.rand())
+        
+        # if rmp_sampled > 1:
+        #     return 1
+        # return rmp_sampled
+        return self.__class__._generate_rmp(self.M, self.sigma)
     
     def update_M(self, value):
         self.M[self.index] = value
