@@ -86,7 +86,7 @@ class model(AbstractModel.model):
             plt.ylim(bottom = -0.1, top = 1.1)
         
 
-    def fit(self, max_inds_each_task: list, min_inds_each_task: list, max_eval_each_task: list, H = 30,LSA = False,  bound = [0, 1], evaluate_initial_skillFactor = False,
+    def fit(self, max_inds_each_task: list, min_inds_each_task: list, max_eval_each_task: list, H = 30, LSA = False, evaluate_initial_skillFactor = False,
         *args, **kwargs): 
         super().fit(*args, **kwargs)
 
@@ -124,12 +124,9 @@ class model(AbstractModel.model):
                 if pa.skill_factor > pb.skill_factor: 
                     pa, pb = pb, pa
                 
-                
-
                 # crossover 
                 if pa.skill_factor == pb.skill_factor: 
-                    oa, ob = self.crossover(pa, pb)
-                    oa.skill_factor, ob.skill_factor= np.random.choice([pa.skill_factor, pb.skill_factor], size= 2, replace= True) 
+                    oa, ob = self.crossover(pa, pb, pa.skill_factor, pa.skill_factor)
 
                 else: 
                     # create rmp 
@@ -137,23 +134,21 @@ class model(AbstractModel.model):
                     list_generate_rmp[pa.skill_factor][pb.skill_factor].append(rmp) 
                     r = np.random.uniform() 
                     if r < rmp: 
-                        oa, ob = self.crossover(pa, pb)
-                        oa.skill_factor, ob.skill_factor= np.random.choice([pa.skill_factor, pb.skill_factor], size= 2, replace= True) 
+                        skf_oa, skf_ob = np.random.choice([pa.skill_factor, pb.skill_factor], size= 2, replace= True) 
+                        oa, ob = self.crossover(pa, pb, skf_oa, skf_ob )
                     else: 
                         pa1 = population[pa.skill_factor].__getRandomItems__()
                         while pa1 is pa:
                             pa1 = population[pa.skill_factor].__getRandomItems__()
-                        oa, _ = self.crossover(pa, pa1) 
+                        oa, _ = self.crossover(pa, pa1, pa.skill_factor, pa.skill_factor ) 
                         oa.skill_factor = pa.skill_factor 
 
                         pb1 = population[pb.skill_factor].__getRandomItems__()
                         while pb1 is pb:
                             pb1 = population[pb.skill_factor].__getRandomItems__()
-                        ob, _ = self.crossover(pb, pb1) 
+                        ob, _ = self.crossover(pb, pb1, pb.skill_factor, pb.skill_factor) 
                         ob.skill_factor = pb.skill_factor 
 
-                    
-                
                 # append and eval 
                 offsprings.__addIndividual__(oa)
                 offsprings.__addIndividual__(ob) 
@@ -205,22 +200,6 @@ class model(AbstractModel.model):
             self.mutation.update(population = population)
             
             # save history 
-            
-            
-            
-            # print 
-    
-            # if (int(eval_each_task[0] / 100) + 1 - len(self.history_cost)) % (num_epochs_printed) == 0:
-            #     if log_oneline == True:
-            #         sys.stdout.write('\r')
-            #     sys.stdout.write('Epoch [{}/{}], [%-20s] %3d%% ,func_val: {}'
-            #         .format((int(eval_each_task[0]/100)) + 1, max_eval_each_task[0],self.history_cost[-1])
-            #         % ('=' * ((np.sum(eval_each_task)) // (np.sum(max_eval_each_task) // 20)) + '>' , (np.sum(eval_each_task) + 1) * 100 // np.sum(max_eval_each_task))
-            #         )
-            #     if log_oneline == False:
-            #         print("\n")
-            #     sys.stderr.flush()
-            #     sys.stdout.flush()
             if int(eval_each_task[0] / 100) > len(self.history_cost):
                 for i in range(len(self.tasks)):
                     j = i + 1

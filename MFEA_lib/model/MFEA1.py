@@ -2,6 +2,7 @@ import numpy as np
 from . import AbstractModel
 from ..operators import Crossover, Mutation, Selection
 from ..tasks.task import AbstractTask
+from ..numba_utils import numba_randomchoice
 from ..EA import *
 
 class model(AbstractModel.model):
@@ -46,7 +47,7 @@ class model(AbstractModel.model):
 
                 # crossover 
                 if pa.skill_factor == pb.skill_factor or np.random.rand() < rmp: 
-                    skf_oa, skf_ob = np.random.choice([pa.skill_factor, pb.skill_factor], size= 2, replace= True) 
+                    skf_oa, skf_ob = numba_randomchoice(np.array([pa.skill_factor, pb.skill_factor]), size= 2, replace= True)
                     oa, ob = self.crossover(pa, pb, skf_oa, skf_ob) 
                 else: 
                     pa1 = population[pa.skill_factor].__getRandomItems__()

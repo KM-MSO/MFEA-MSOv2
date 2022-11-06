@@ -13,5 +13,5 @@ def numba_randomchoice_w_prob(a):
     return res
 
 @jit(nopython = True)
-def numba_RandomIndex(a, size= None, replace= True):
-    return np.random.choice(a, size = size, replace= replace)
+def numba_randomchoice(a, size= None, replace= True):
+    return np.random.choice(a, size= size, replace= replace)

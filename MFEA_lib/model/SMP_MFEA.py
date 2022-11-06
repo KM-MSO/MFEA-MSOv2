@@ -7,6 +7,7 @@ from ..operators import Crossover, Mutation, Search, Selection
 from ..tasks.task import AbstractTask
 from . import AbstractModel
 from ..numba_utils import numba_randomchoice_w_prob
+import time
 
 class model(AbstractModel.model):
     class battle_smp:
@@ -70,7 +71,8 @@ class model(AbstractModel.model):
         super().compile(IndClass, tasks, crossover, mutation, selection, *args, **kwargs)
         self.search = search
         self.search.getInforTasks(IndClass, tasks, seed = self.seed)
-    
+        self.time_parts = [0] * 20
+
     def render_smp(self,  shape = None, title = None, figsize = None, dpi = 100, step = 1, re_fig = False, label_shape= None, label_loc= None):
         
         if title is None:
@@ -127,6 +129,7 @@ class model(AbstractModel.model):
         evaluate_initial_skillFactor = False,
         *args, **kwargs):
         super().fit(*args, **kwargs)
+        s_time = time.time()
         
         self.p_const_intra = p_const_intra
 
@@ -179,8 +182,10 @@ class model(AbstractModel.model):
         # Delta epoch
         Delta:List[List[float]] = np.zeros((len(self.tasks), len(self.tasks) + 1)).tolist()
         count_Delta: List[List[float]] = np.zeros((len(self.tasks), len(self.tasks) + 1)).tolist()
+        self.time_parts[0] = time.time() - s_time
 
         while sum(eval_k) <= MAXEVALS:
+            s_time = time.time()
             turn_eval = 0
 
             # initial offspring_population of generation
@@ -190,6 +195,9 @@ class model(AbstractModel.model):
                 dim =  self.dim_uss, 
                 list_tasks= self.tasks,
             )
+            self.time_parts[1] += time.time() - s_time
+            s_time = time.time()
+
             while turn_eval < sum(nb_inds_tasks):
                 if sum(eval_k) >= epoch * nb_inds_each_task * len(self.tasks):
                     # save history
@@ -200,8 +208,7 @@ class model(AbstractModel.model):
 
                     epoch += 1
 
-                
-                if random.rand() < prob_search:
+                if random.random() < prob_search:
                     for i in range(2):
                         # choose subpop of father pa
                         skf_pa = numba_randomchoice_w_prob(p_choose_father)
@@ -216,6 +223,7 @@ class model(AbstractModel.model):
                         eval_k[skf_pa] += 1
                         turn_eval += 1
                 else:
+                    s_cross_time = time.time()
                     # choose subpop of father pa
                     skf_pa = numba_randomchoice_w_prob(p_choose_father)
 
@@ -236,20 +244,32 @@ class model(AbstractModel.model):
 
                         if np.all(pa.genes == pb.genes):
                             pb = population[skf_pb].__getWorstIndividual__
-                            
+                        self.time_parts[8] += time.time() - s_cross_time
+                        
+                        s_tmp = time.time()
                         oa, ob = self.crossover(pa, pb, skf_pa, skf_pa, population)
+                        self.time_parts[9] += time.time() - s_tmp
+
                     else:
                         pa, pb = population.__getIndsTask__(skf_pa, type= 'random', size= 2)
+                        self.time_parts[8] += time.time() - s_cross_time
 
+                        s_tmp = time.time()
                         oa = self.mutation(pa, return_newInd= True)
                         oa.skill_factor = skf_pa
 
                         ob = self.mutation(pb, return_newInd= True)
                         ob.skill_factor = skf_pa
+                        self.time_parts[10] += time.time() - s_tmp
+
+                    self.time_parts[5] += time.time() - s_cross_time
+                    s_cross_time = time.time()
 
                     # add oa, ob to offsprings population and eval fcost
                     offsprings.__addIndividual__(oa)
                     offsprings.__addIndividual__(ob)
+                    self.time_parts[6] += time.time() - s_cross_time
+                    s_cross_time = time.time()
 
                     count_Delta[skf_pa][skf_pb] += 2
                     eval_k[skf_pa] += 2
@@ -275,6 +295,10 @@ class model(AbstractModel.model):
                     elif count_eval_stop[skf_pa] == 0:
                         pass
 
+                    self.time_parts[-1] += time.time() - s_cross_time
+            
+            self.time_parts[2] += time.time() - s_time
+            s_time = time.time()
             # merge
             population = population + offsprings
             population.update_rank()
@@ -312,8 +336,8 @@ class model(AbstractModel.model):
             #             population[skf].ls_inds[0].genes= new_ind.genes 
             #             population[skf].ls_inds[0].fcost = new_ind.fcost
             #             population.update_rank()  
-
-
+            self.time_parts[3] += time.time() - s_time
+            s_time = time.time()
 
 
         #solve
