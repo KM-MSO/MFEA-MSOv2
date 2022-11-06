@@ -6,6 +6,9 @@ from ..tasks.task import AbstractTask
 from ..EA import *
 import matplotlib.pyplot as plt
 
+import math 
+import random
+
 class Memory:
     def __init__(self, H=5, sigma=0.1):
         self.H = H
@@ -13,17 +16,29 @@ class Memory:
         self.sigma = sigma
         self.M = np.zeros((H), dtype=float) + 0.5
     
-
-    def random_Gauss(self):
-        mean = np.random.choice(self.M)
-
-        rmp_sampled = 0
-        while rmp_sampled <= 0:
-            rmp_sampled = mean + self.sigma * np.sqrt(-2.0 * np.log(np.random.uniform())) * np.sin(2.0 * np.pi * np.random.uniform())
-
-        if rmp_sampled > 1:
+    @staticmethod
+    @jit(nopython= True)
+    def _generate_rmp(M, sigma):
+        mean = numba_randomchoice(M)
+        rmp_sampled = 0 
+        while rmp_sampled <= 0: 
+            rmp_sampled = mean + sigma *math.sqrt(-2.0 * math.log(np.random.rand())) * math.sin(2.0 * math.pi * np.random.rand())
+        
+        if rmp_sampled > 1: 
             return 1
         return rmp_sampled
+
+    def random_Gauss(self):
+        # mean = numba_randomchoice(self.M)
+
+        # rmp_sampled = 0 
+        # while rmp_sampled <= 0:
+        #     rmp_sampled = mean + self.sigma * math.sqrt(-2.0 * math.log(random.rand())) * math.sin(2.0 * math.pi * random.rand())
+        
+        # if rmp_sampled > 1:
+        #     return 1
+        # return rmp_sampled
+        return self.__class__._generate_rmp(self.M, self.sigma)
     
     def update_M(self, value):
         self.M[self.index] = value
@@ -86,7 +101,7 @@ class model(AbstractModel.model):
             plt.ylim(bottom = -0.1, top = 1.1)
         
 
-    def fit(self, max_inds_each_task: list, min_inds_each_task: list, max_eval_each_task: list, H = 30, LSA = False, evaluate_initial_skillFactor = False,
+    def fit(self, max_inds_each_task: list, min_inds_each_task: list, max_eval_each_task: list, H = 30, evaluate_initial_skillFactor = False,
         *args, **kwargs): 
         super().fit(*args, **kwargs)
 
@@ -160,17 +175,17 @@ class model(AbstractModel.model):
 
                     if oa.skill_factor == pa.skill_factor : 
                         if pa.fcost > 0: 
-                            delta = np.max([delta, (pa.fcost - oa.fcost) / (pa.fcost)])
+                            delta = max([delta, (pa.fcost - oa.fcost) / (pa.fcost)])
                     else: 
                         if pb.fcost > 0: 
-                            delta = np.max([delta, (pb.fcost - oa.fcost) / (pb.fcost)]) 
+                            delta = max([delta, (pb.fcost - oa.fcost) / (pb.fcost)]) 
                     
                     if ob.skill_factor == pa.skill_factor:
                         if pa.fcost > 0: 
-                            delta = np.max([delta, (pa.fcost - ob.fcost) / (pa.fcost)])    
+                            delta = max([delta, (pa.fcost - ob.fcost) / (pa.fcost)])    
                     else: 
                         if pb.fcost > 0: 
-                            delta = np.max([delta, (pb.fcost - ob.fcost) / (pb.fcost)]) 
+                            delta = max([delta, (pb.fcost - ob.fcost) / (pb.fcost)]) 
                     
 
                     # update S and sigma 
@@ -186,7 +201,7 @@ class model(AbstractModel.model):
             memory_H = self.Update_History_Memory(memory_H, S, sigma) 
 
             # linear size 
-            if LSA is True: 
+            if min_inds_each_task[0] < max_inds_each_task[0]: 
                 current_inds_each_task = self.Linear_population_size_reduction(eval_each_task, current_inds_each_task, max_eval_each_task, max_inds_each_task, min_inds_each_task) 
             # merge 
             population = population + offsprings 
@@ -212,7 +227,7 @@ class model(AbstractModel.model):
                         j += 1  
 
                 self.history_cost.append([ind.fcost for ind in population.get_solves()])        
-                self.render_process(np.sum(eval_each_task)/ np.sum(max_eval_each_task),["cost"], [self.history_cost[-1]])
+                self.render_process(np.sum(eval_each_task)/ np.sum(max_eval_each_task),["cost"], [self.history_cost[-1]], use_sys= True)
     
         print("End")
 

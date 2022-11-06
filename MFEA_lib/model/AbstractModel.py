@@ -105,7 +105,7 @@ class model():
         self.mutation(pa, return_newInd= False)
 
         # test selection
-        self.selection(test_pop, [5] * len(self.tasks))
+        # self.selection(test_pop, [5] * len(self.tasks))
 
 
 
