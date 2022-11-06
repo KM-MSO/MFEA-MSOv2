@@ -86,6 +86,27 @@ class model():
         self.crossover.getInforTasks(IndClass, tasks, seed = self.seed)
         self.mutation.getInforTasks(IndClass, tasks, seed = self.seed)
         self.selection.getInforTasks(tasks, seed = self.seed)
+        
+        # test Ind and task
+        test_pop = Population(
+            self.IndClass,
+            nb_inds_tasks = [10] * len(self.tasks), 
+            dim = self.dim_uss,
+            list_tasks= self.tasks,
+            evaluate_initial_skillFactor = True
+        )
+
+        # test crossover
+        pa, pb = test_pop.__getRandomInds__(2)
+        self.crossover(pa, pb, pa.skill_factor, pb.skill_factor)
+
+        # test mutation
+        self.mutation(pa, return_newInd= True)
+        self.mutation(pa, return_newInd= False)
+
+        # test selection
+        self.selection(test_pop, [5] * len(self.tasks))
+
 
 
     def render_process(self,curr_progress, list_desc, list_value, use_sys = False,print_format_e = True,  *args, **kwargs):
