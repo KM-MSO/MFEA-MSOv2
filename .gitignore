@@ -1,7 +1,5 @@
 *.mso
 RESULTS/**
-!/RESULTS/__static__/
-!/RESULTS/__static__/**
 
 test*.py
 # Byte-compiled / optimized / DLL files
