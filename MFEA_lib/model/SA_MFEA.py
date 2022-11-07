@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 import math 
 import random
+import time 
 
 class Memory:
     def __init__(self, H=5, sigma=0.1):
@@ -66,15 +67,6 @@ class model(AbstractModel.model):
 
         return history_memories
     
-    def Linear_population_size_reduction(self, evaluations, current_size_pop, max_eval_each_tasks, max_size, min_size):
-        for task in range(len(self.tasks)):
-            new_size = (min_size[task] - max_size[task]) * evaluations[task] / max_eval_each_tasks[task] + max_size[task] 
-
-            new_size= int(new_size) 
-            if new_size < current_size_pop[task]: 
-                current_size_pop[task] = new_size 
-        
-        return current_size_pop 
 
     def render_rmp(self): 
         fig = plt.figure(figsize = (50, 12), dpi= 500)
@@ -100,13 +92,15 @@ class model(AbstractModel.model):
             plt.ylabel("M_rmp")
             plt.ylim(bottom = -0.1, top = 1.1)
         
-
-    def fit(self, max_inds_each_task: list, min_inds_each_task: list, max_eval_each_task: list, H = 30, evaluate_initial_skillFactor = False,
+    # def fit(self, max_inds_each_task: list, min_inds_each_task: list, max_eval_each_task: list, H = 30, evaluate_initial_skillFactor = False,
+    def fit(self, nb_generations: int, nb_inds_each_task: int, nb_inds_min: int, H = 30, evaluate_initial_skillFactor = False,
         *args, **kwargs): 
         super().fit(*args, **kwargs)
-
-        current_inds_each_task = np.copy(max_inds_each_task) 
-        eval_each_task = np.zeros_like(max_eval_each_task)
+        self.time_series = [0] * 20 
+        
+        time_init = time.time() 
+        current_inds_each_task = [nb_inds_each_task]  * len(self.tasks)
+        eval_each_task = [0] * len(self.tasks)
 
         population = Population(
             self.IndClass,
@@ -120,8 +114,14 @@ class model(AbstractModel.model):
 
         memory_H = [[Memory(H) for i in range(len(self.tasks))] for j in range(len(self.tasks))]
 
-        while np.sum(eval_each_task) < np.sum(max_eval_each_task):
+        MAXEVALS = nb_generations * nb_inds_each_task * len(self.tasks)
+        epoch = 1
 
+        self.time_series[0] += time.time() - time_init
+
+        time_run = time.time() 
+        while sum(eval_each_task) <= MAXEVALS:
+            time_init_popu = time.time() 
             S = np.empty((len(self.tasks), len(self.tasks), 0)).tolist() 
             sigma = np.empty((len(self.tasks), len(self.tasks), 0)).tolist()
 
@@ -132,8 +132,34 @@ class model(AbstractModel.model):
                 list_tasks= self.tasks,
             )
             list_generate_rmp = np.empty((len(self.tasks), len(self.tasks), 0)).tolist()
+
+            nb_offs = 0 
+
+            self.time_series[2] += time.time() - time_init_popu 
             # create new offspring population 
-            while len(offsprings) < len(population): 
+            time_cal_condition = time.time() 
+            while nb_offs < sum(current_inds_each_task): 
+                time_check_epoch = time.time() 
+                # save history 
+                if sum(eval_each_task) >= epoch * nb_inds_each_task * len(self.tasks):
+                    for i in range(len(self.tasks)):
+                        j = i + 1
+                        while j < len(self.tasks):
+                            if len(list_generate_rmp[i][j]) > 0:
+                                self.history_rmp[i][j].append(
+                                    sum(list_generate_rmp[i][j])
+                                    / len(list_generate_rmp[i][j])
+                                )
+                            j += 1  
+
+                    self.history_cost.append([ind.fcost for ind in population.get_solves()])        
+                    self.render_process(epoch/nb_generations, ['Pop_size', 'Cost'], [[len(population)], self.history_cost[-1]], use_sys= True)
+                    epoch += 1
+
+                self.time_series[3] += time.time() - time_check_epoch 
+
+                time_cross = time.time() 
+
                 pa, pb = population.__getRandomInds__(size =2) 
 
                 if pa.skill_factor > pb.skill_factor: 
@@ -142,6 +168,7 @@ class model(AbstractModel.model):
                 # crossover 
                 if pa.skill_factor == pb.skill_factor: 
                     oa, ob = self.crossover(pa, pb, pa.skill_factor, pa.skill_factor)
+                    nb_offs += 2
 
                 else: 
                     # create rmp 
@@ -163,7 +190,10 @@ class model(AbstractModel.model):
                             pb1 = population[pb.skill_factor].__getRandomItems__()
                         ob, _ = self.crossover(pb, pb1, pb.skill_factor, pb.skill_factor) 
                         ob.skill_factor = pb.skill_factor 
+                    nb_offs += 2
+                self.time_series[4] += time.time() - time_cross 
 
+                time_add_off_and_cal_del = time.time() 
                 # append and eval 
                 offsprings.__addIndividual__(oa)
                 offsprings.__addIndividual__(ob) 
@@ -195,14 +225,20 @@ class model(AbstractModel.model):
                 
                 eval_each_task[oa.skill_factor] += 1 
                 eval_each_task[ob.skill_factor] += 1 
+
+                self.time_series[5] += time.time() - time_add_off_and_cal_del 
             
+            time_update = time.time() 
 
             # update memory H 
             memory_H = self.Update_History_Memory(memory_H, S, sigma) 
 
             # linear size 
-            if min_inds_each_task[0] < max_inds_each_task[0]: 
-                current_inds_each_task = self.Linear_population_size_reduction(eval_each_task, current_inds_each_task, max_eval_each_task, max_inds_each_task, min_inds_each_task) 
+            if nb_inds_min < nb_inds_each_task: 
+                current_inds_each_task = [int(
+                # (nb_inds_min - nb_inds_each_task) / nb_generations * (epoch - 1) + nb_inds_each_task
+                int(min((nb_inds_min - nb_inds_each_task)/(nb_generations - 1)* (epoch - 1) + nb_inds_each_task, nb_inds_each_task))
+            )] * len(self.tasks)
             # merge 
             population = population + offsprings 
             population.update_rank()
@@ -213,28 +249,19 @@ class model(AbstractModel.model):
             # update operators
             self.crossover.update(population = population)
             self.mutation.update(population = population)
-            
-            # save history 
-            if int(eval_each_task[0] / 100) > len(self.history_cost):
-                for i in range(len(self.tasks)):
-                    j = i + 1
-                    while j < len(self.tasks):
-                        if len(list_generate_rmp[i][j]) > 0:
-                            self.history_rmp[i][j].append(
-                                np.sum(list_generate_rmp[i][j])
-                                / len(list_generate_rmp[i][j])
-                            )
-                        j += 1  
 
-                self.history_cost.append([ind.fcost for ind in population.get_solves()])        
-                self.render_process(np.sum(eval_each_task)/ np.sum(max_eval_each_task),["cost"], [self.history_cost[-1]], use_sys= True)
-    
+            self.time_series[6] += time.time() - time_update
+
+        self.time_series[1] += time.time() - time_run 
+   
         print("End")
 
         # solve 
         self.last_pop = population 
 
-        return self.last_pop.get_solves() 
+        # return self.last_pop.get_solves() 
+        return self.time_series
+
 
 
 
